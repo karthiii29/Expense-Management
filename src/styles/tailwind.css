@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  @import '../**/*.{js,ts,jsx,tsx}';
+}
+
+@import 'tw-animate-css';
