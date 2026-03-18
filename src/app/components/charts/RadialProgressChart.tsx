@@ -1,19 +1,7 @@
 import { motion } from "motion/react";
 import { useRealTime } from "../../context/RealTimeContext";
-import { categoryData } from "../../data/mockData";
-
-const TOTAL_BUDGET = 34000;
-
-const CATEGORY_BUDGETS: Record<string, number> = {
-  "Food & Dining": 8000,
-  "Transport":     5000,
-  "Shopping":      4000,
-  "Entertainment": 1500,
-  "Health":        2500,
-  "Utilities":     3500,
-  "Education":     4000,
-  "Travel":        6000,
-};
+import { useData } from "../../context/DataContext";
+import { getCategoryColor } from "../../data/mockData";
 
 function getBudgetColor(pct: number) {
   if (pct > 0.85) return "#EF4444";
@@ -86,15 +74,25 @@ function MiniRing({ label, spent, budget, color, delay, catColor }: MiniRingProp
 
 export function RadialProgressChart() {
   const { totalLiveExpenses, pulseKey } = useRealTime();
+  const { categoryData } = useData();
+
+  // Use total of all budgets if set, else derive from expenses with 20% buffer
+  const totalSpent = categoryData.reduce((s: number, c: { value: number }) => s + c.value, 0);
+  const TOTAL_BUDGET = Math.max(totalSpent * 1.2, 1000);
+
+  // Per-category budgets: 120% of current spend (so users see how close they are)
+  const CATEGORY_BUDGETS: Record<string, number> = {};
+  categoryData.forEach((c: { name: string; value: number }) => {
+    CATEGORY_BUDGETS[c.name] = Math.max(Math.round(c.value * 1.2), 100);
+  });
 
   const mainR = 88;
   const mainC = 2 * Math.PI * mainR;
   const mainPct = Math.min(totalLiveExpenses / TOTAL_BUDGET, 1);
   const mainColor = getBudgetColor(mainPct);
 
-  // Category totals from categoryData
   const catMap: Record<string, { value: number; color: string }> = {};
-  categoryData.forEach((c) => { catMap[c.name] = { value: c.value, color: c.color }; });
+  categoryData.forEach((c: { name: string; value: number; color: string }) => { catMap[c.name] = { value: c.value, color: c.color }; });
 
   return (
     <div>

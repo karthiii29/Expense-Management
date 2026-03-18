@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { familyMembers, settlementData } from "../../data/mockData";
+import { useData } from "../../context/DataContext";
+import type { FamilyMember } from "../../data/mockData";
 
 /* ── Node positions in 380×300 SVG ───────────────────────────────────── */
 const POSITIONS: Record<string, { x: number; y: number }> = {
@@ -57,6 +58,7 @@ const STATUS_COLOR = { pending: "#F59E0B", settled: "#10B981" };
 const STATUS_LABEL = { pending: "OWES", settled: "SETTLED" };
 
 export function SplitFlowChart() {
+  const { familyMembers, settlementData } = useData();
   const [hovered, setHovered] = useState<string | null>(null);
 
   const memberMap = Object.fromEntries(familyMembers.map((m) => [m.id, m]));

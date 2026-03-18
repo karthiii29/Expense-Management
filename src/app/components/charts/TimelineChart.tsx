@@ -5,7 +5,12 @@ import {
 } from "recharts";
 import { motion } from "motion/react";
 import { useRealTime } from "../../context/RealTimeContext";
-import { spendingTrendData } from "../../data/mockData";
+
+interface SpendingPoint { day: string; amount: number; [key: string]: any; }
+
+interface TimelineChartProps {
+  data?: SpendingPoint[];
+}
 
 /* ── Glass Tooltip ───────────────────────────────────────────────────── */
 const GlassTooltip = ({ active, payload, label }: any) => {
@@ -40,16 +45,16 @@ const GlassTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-/* ── Custom dot: only on the latest/peak point ───────────────────────── */
+/* ── Custom dot: highlight the latest point with a glow ring ────────── */
 const SmartDot = (props: any) => {
-  const { cx, cy, index, payload } = props;
-  const isLatest = index === spendingTrendData.length - 1;
-  const isPeak = payload.amount >= 15000;
+  const { cx, cy, index, payload, dataLength } = props;
+  const isLatest = index === (dataLength ?? 0) - 1;
+  const isPeak = payload?.amount >= 15000;
   if (isLatest) {
     return (
       <g key={`tl-dot-${index}`}>
         <circle cx={cx} cy={cy} r={12} fill="var(--iq-accent)" fillOpacity={0.12} />
-        <circle cx={cx} cy={cy} r={7} fill="var(--iq-accent)" fillOpacity={0.3} />
+        <circle cx={cx} cy={cy} r={7}  fill="var(--iq-accent)" fillOpacity={0.3} />
         <circle cx={cx} cy={cy} r={3.5} fill="var(--iq-accent)" />
         <circle cx={cx} cy={cy} r={1.5} fill="#fff" />
       </g>
@@ -58,7 +63,7 @@ const SmartDot = (props: any) => {
   if (isPeak) {
     return (
       <g key={`tl-dot-${index}`}>
-        <circle cx={cx} cy={cy} r={5} fill="#F59E0B" fillOpacity={0.25} />
+        <circle cx={cx} cy={cy} r={5}   fill="#F59E0B" fillOpacity={0.25} />
         <circle cx={cx} cy={cy} r={2.5} fill="#F59E0B" />
       </g>
     );
@@ -76,7 +81,6 @@ const BrushTraveller = (props: any) => {
         rx={4} fill="var(--iq-accent)" fillOpacity={0.3}
         stroke="var(--iq-accent)" strokeWidth={1}
       />
-      {/* grip lines */}
       {[height / 2 - 4, height / 2, height / 2 + 4].map((ly, i) => (
         <line key={i} x1={x + 3} y1={y + ly} x2={x + width - 3} y2={y + ly}
           stroke="var(--iq-accent)" strokeWidth={1} strokeOpacity={0.6} />
@@ -85,16 +89,26 @@ const BrushTraveller = (props: any) => {
   );
 };
 
-export function TimelineChart() {
-  const { isRefreshing, pulseKey } = useRealTime();
+export function TimelineChart({ data = [] }: TimelineChartProps) {
+  const { pulseKey } = useRealTime();
   const [refLineX, setRefLineX] = useState<string | null>(null);
 
-  // Find average for reference line
-  const avg = spendingTrendData.reduce((s, d) => s + d.amount, 0) / spendingTrendData.length;
+  const avg = data.length
+    ? data.reduce((s: number, d: SpendingPoint) => s + d.amount, 0) / data.length
+    : 0;
+
+  if (data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[220px] gap-2">
+        <p style={{ fontSize: "14px", color: "var(--iq-text-3)" }}>No spending data yet</p>
+        <p style={{ fontSize: "12px", color: "var(--iq-text-4)" }}>Add expenses to see your spending timeline</p>
+      </div>
+    );
+  }
 
   return (
     <div>
-      {/* Instructions */}
+      {/* Legend / instructions */}
       <div className="flex items-center gap-4 mb-4 flex-wrap">
         <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg" style={{ background: "var(--iq-accent-s)", border: "1px solid var(--iq-accent-b)" }}>
           <span style={{ fontSize: "10px", color: "var(--iq-accent)", fontWeight: 600 }}>
@@ -105,62 +119,49 @@ export function TimelineChart() {
           <div className="w-3 h-0.5" style={{ background: "rgba(245,158,11,0.7)", borderRadius: 1 }} />
           <span style={{ fontSize: "10px", color: "var(--iq-text-4)" }}>Peak spend</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-0" style={{ borderTop: "2px dashed rgba(255,255,255,0.2)" }} />
-          <span style={{ fontSize: "10px", color: "var(--iq-text-4)" }}>Daily avg ₹{Math.round(avg / 1000)}k</span>
-        </div>
+        {avg > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0" style={{ borderTop: "2px dashed rgba(255,255,255,0.2)" }} />
+            <span style={{ fontSize: "10px", color: "var(--iq-text-4)" }}>
+              Daily avg ₹{avg >= 1000 ? `${Math.round(avg / 1000)}k` : Math.round(avg)}
+            </span>
+          </div>
+        )}
       </div>
 
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart
           key={`tl-${pulseKey}`}
-          data={spendingTrendData}
+          data={data}
           margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
-          onMouseMove={(e) => {
-            if (e.activeLabel) setRefLineX(e.activeLabel as string);
-          }}
+          onMouseMove={(e) => { if (e.activeLabel) setRefLineX(e.activeLabel as string); }}
           onMouseLeave={() => setRefLineX(null)}
         >
           <defs>
             <linearGradient id="tlGradFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--iq-accent)" stopOpacity={0.55} />
-              <stop offset="40%" stopColor="var(--iq-accent)" stopOpacity={0.2} />
-              <stop offset="100%" stopColor="var(--iq-accent)" stopOpacity={0} />
+              <stop offset="0%"   stopColor="var(--iq-accent)" stopOpacity={0.55} />
+              <stop offset="40%"  stopColor="var(--iq-accent)" stopOpacity={0.2}  />
+              <stop offset="100%" stopColor="var(--iq-accent)" stopOpacity={0}    />
             </linearGradient>
             <linearGradient id="tlStroke" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="var(--iq-accent-d)" stopOpacity={0.7} />
-              <stop offset="100%" stopColor="var(--iq-accent)" stopOpacity={1} />
+              <stop offset="0%"   stopColor="var(--iq-accent-d)" stopOpacity={0.7} />
+              <stop offset="100%" stopColor="var(--iq-accent)"   stopOpacity={1}   />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal={true} vertical={false} />
-          {/* Average reference line */}
-          <ReferenceLine
-            y={avg}
-            stroke="rgba(255,255,255,0.2)"
-            strokeDasharray="5 3"
-            strokeWidth={1}
-          />
-          {/* Hover reference line */}
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" horizontal vertical={false} />
+          <ReferenceLine y={avg} stroke="rgba(255,255,255,0.2)" strokeDasharray="5 3" strokeWidth={1} />
           {refLineX && (
-            <ReferenceLine
-              x={refLineX}
-              stroke="var(--iq-accent)"
-              strokeOpacity={0.4}
-              strokeWidth={1}
-            />
+            <ReferenceLine x={refLineX} stroke="var(--iq-accent)" strokeOpacity={0.4} strokeWidth={1} />
           )}
           <XAxis
             dataKey="day"
             tick={{ fill: "var(--iq-text-4)" as string, fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            interval={2}
+            axisLine={false} tickLine={false} interval="preserveStartEnd"
           />
           <YAxis
             tick={{ fill: "var(--iq-text-4)" as string, fontSize: 10 }}
-            axisLine={false}
-            tickLine={false}
-            tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
+            axisLine={false} tickLine={false}
+            tickFormatter={(v) => v >= 1000 ? `₹${(v / 1000).toFixed(0)}k` : `₹${v}`}
             width={38}
           />
           <Tooltip content={<GlassTooltip />} cursor={false} />
@@ -170,11 +171,10 @@ export function TimelineChart() {
             stroke="url(#tlStroke)"
             strokeWidth={2.5}
             fill="url(#tlGradFill)"
-            dot={SmartDot}
+            dot={(props: any) => <SmartDot {...props} dataLength={data.length} />}
             activeDot={{ r: 6, fill: "var(--iq-accent)", stroke: "var(--iq-bg)", strokeWidth: 2.5 }}
             name="Spending"
           />
-          {/* Brush range selector */}
           <Brush
             dataKey="day"
             height={28}
@@ -185,16 +185,8 @@ export function TimelineChart() {
             startIndex={0}
             style={{ marginTop: 8 }}
           >
-            {/* Mini preview area inside brush */}
-            <AreaChart data={spendingTrendData}>
-              <Area
-                type="monotone"
-                dataKey="amount"
-                stroke="var(--iq-accent)"
-                strokeWidth={1}
-                fill="var(--iq-accent-s)"
-                dot={false}
-              />
+            <AreaChart data={data}>
+              <Area type="monotone" dataKey="amount" stroke="var(--iq-accent)" strokeWidth={1} fill="var(--iq-accent-s)" dot={false} />
             </AreaChart>
           </Brush>
         </AreaChart>

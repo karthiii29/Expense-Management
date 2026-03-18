@@ -1,20 +1,9 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { useRealTime } from "../../context/RealTimeContext";
+import { useData } from "../../context/DataContext";
+import { useTheme } from "../../context/ThemeContext";
 
-// Supplementary mock data — only for days WITHOUT a real transaction
-// Real transaction dates: 2,4,6,8,10,11,13,15,17,18,19,20,21,22,23,24,25,26,27,28
-// These fill in the quiet days: 1,3,5,7,9,12,14,16
-const MOCK_DAILY: Record<string, number> = {
-  "2026-02-01": 0,    // fresh month, no spend
-  "2026-02-03": 150,  // chai + auto to market
-  "2026-02-05": 0,    // rest day
-  "2026-02-07": 320,  // weekend breakfast at local dhaba
-  "2026-02-09": 120,  // roadside snack + nimbu pani
-  "2026-02-12": 0,    // day before the trip, packing
-  "2026-02-14": 280,  // Valentine's Day breakfast + flowers
-  "2026-02-16": 90,   // chai/evening snack
-};
+// Supplementary mock data removed — all data now comes from DataContext
 
 function getSpendColor(amount: number, isDark: boolean): string {
   if (amount === 0) return isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.06)";
@@ -37,42 +26,58 @@ function getTextColor(amount: number): string {
 const DAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 export function HeatmapCalendar() {
-  const { liveExpenses } = useRealTime();
+  const { expenses } = useData();
+  const { effectiveTheme } = useTheme();
+  const isDark = effectiveTheme === "dark";
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
-  // Build daily totals
-  const dailyTotals: Record<string, number> = { ...MOCK_DAILY };
-  liveExpenses.forEach((e) => {
-    if (e.date.startsWith("2026-02-")) {
+  // Determine which month/year to show — use the month with most expenses, or current month
+  const now = new Date();
+  const monthCounts: Record<string, number> = {};
+  expenses.forEach((e) => {
+    const key = e.date.slice(0, 7); // "YYYY-MM"
+    monthCounts[key] = (monthCounts[key] || 0) + 1;
+  });
+  const topMonth = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0]?.[0]
+    ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const [year, month] = topMonth.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDOW = new Date(year, month - 1, 1).getDay(); // 0=Sun
+
+  const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+
+  // Build daily totals for this month
+  const dailyTotals: Record<string, number> = {};
+  expenses.forEach((e) => {
+    if (e.date.startsWith(topMonth)) {
       dailyTotals[e.date] = (dailyTotals[e.date] ?? 0) + e.amount;
     }
   });
 
-  // Feb 2026 starts on Sunday (day index 0)
+  // Build calendar weeks
   const weeks: (number | null)[][] = [];
-  let week: (number | null)[] = Array(7).fill(null);
-  for (let d = 1; d <= 28; d++) {
-    const dow = (d - 1) % 7; // Feb 1 = Sunday = 0
-    week[dow] = d;
-    if (dow === 6 || d === 28) {
+  let week: (number | null)[] = Array(firstDOW).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    week.push(d);
+    if (week.length === 7 || d === daysInMonth) {
+      while (week.length < 7) week.push(null);
       weeks.push([...week]);
-      week = Array(7).fill(null);
+      week = [];
     }
   }
 
   const maxSpend = Math.max(...Object.values(dailyTotals).filter(Boolean), 1);
-  const totalMonth = Object.values(dailyTotals).reduce((s, v) => s + v, 0);
-  const activeDays = Object.values(dailyTotals).filter((v) => v > 0).length;
-
-  const isDark = true; // default dark
+  const totalMonth = Object.values(dailyTotals).reduce((s: number, v: number) => s + v, 0);
+  const activeDays = Object.values(dailyTotals).filter((v: number) => v > 0).length;
 
   return (
     <div>
       {/* Month header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p style={{ fontSize: "12px", color: "var(--iq-text-4)" }}>February 2026</p>
+          <p style={{ fontSize: "12px", color: "var(--iq-text-4)" }}>{monthLabel}</p>
           <p style={{ fontSize: "11px", color: "var(--iq-text-4)", marginTop: "2px" }}>
             {activeDays} active days · ₹{totalMonth.toLocaleString("en-IN")} total
           </p>
@@ -106,7 +111,7 @@ export function HeatmapCalendar() {
           <div key={wi} className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
             {week.map((day, di) => {
               if (day === null) return <div key={di} />;
-              const dateStr = `2026-02-${day.toString().padStart(2, "0")}`;
+              const dateStr = `${year}-${String(month).padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
               const amount = dailyTotals[dateStr] ?? 0;
               const bgColor = getSpendColor(amount, isDark);
               const isHovered = hoveredDay === dateStr;

@@ -4,13 +4,10 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { motion } from "motion/react";
-import { monthlyData, monthlyIncome } from "../../data/mockData";
+import { useData } from "../../context/DataContext";
 
 // Derive "savings" from the monthly data
-const enriched = monthlyData.map((d) => ({
-  ...d,
-  savings: Math.max(d.income - d.expenses - d.investments, 0),
-}));
+// (moved inside component to use live data)
 
 type SeriesKey = "expenses" | "investments" | "savings";
 
@@ -49,11 +46,17 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function StackedAreaChart() {
+  const { monthlyData, monthlyIncome } = useData();
   const [visible, setVisible] = useState<Record<SeriesKey, boolean>>({
     expenses: true,
     investments: true,
     savings: true,
   });
+
+  const enriched = monthlyData.map((d: { month: string; expenses: number; investments: number; income: number }) => ({
+    ...d,
+    savings: Math.max(d.income - d.expenses - d.investments, 0),
+  }));
 
   const toggle = (key: SeriesKey) =>
     setVisible((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -107,10 +110,20 @@ export function StackedAreaChart() {
 
         {/* Summary stats */}
         <div className="ml-auto flex items-center gap-4">
-          <span style={{ fontSize: "10px", color: "var(--iq-text-4)" }}>Monthly Income ₹82k</span>
+          {monthlyIncome > 0 && (
+            <span style={{ fontSize: "10px", color: "var(--iq-text-4)" }}>
+              Income ₹{monthlyIncome >= 1000 ? `${(monthlyIncome / 1000).toFixed(0)}k` : monthlyIncome}
+            </span>
+          )}
         </div>
       </div>
 
+      {enriched.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-[200px] gap-2">
+          <p style={{ fontSize: "14px", color: "var(--iq-text-3)" }}>No monthly data yet</p>
+          <p style={{ fontSize: "12px", color: "var(--iq-text-4)" }}>Add expenses to see trends</p>
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={enriched} margin={{ top: 8, right: 6, left: 0, bottom: 0 }}>
           <defs>
@@ -175,6 +188,7 @@ export function StackedAreaChart() {
           />
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </div>
   );
 }
